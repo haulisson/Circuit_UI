@@ -16,14 +16,29 @@ export class CanvasView {
 
     // serviços
     this.hitTestService = new HitTestService();
-
-    // DPI aware
-    this.#setupHiDPI();
+    
+    this.resize(); // <-- garante tamanho HiDPI agora
+    
+    // // DPI aware
+    // this.#setupHiDPI();
 
     // (Opcional) listeners simples de pan
     this.#installBasicPan();
+    
+    // render inicial na próxima pintura do browser
+    requestAnimationFrame(() => this.render());
   }
 
+  // NOVO: torne setupHiDPI público via resize()
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const { width, height } = this.canvas.getBoundingClientRect();
+    this.canvas.width = Math.max(1, Math.round(width * dpr));
+    this.canvas.height = Math.max(1, Math.round(height * dpr));
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.render();
+  }
+  
   setViewport({ scale, originX, originY } = {}) {
     if (scale !== undefined) this.scale = scale;
     if (originX !== undefined) this.originX = originX;
@@ -37,6 +52,13 @@ export class CanvasView {
       px / this.scale + this.originX,
       py / this.scale + this.originY
     ];
+  }
+
+  clientToWorld(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    return this.toWorld(px, py);
   }
 
   toScreen(wx, wy) {

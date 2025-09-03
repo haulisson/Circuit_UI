@@ -3,12 +3,48 @@ import { CanvasModel } from "../canvas/CanvasModel.js";
 import { CanvasView } from "../canvas/CanvasView.js";
 import { WireElement } from "../canvas/elements/WireElement.js";
 import { ResistorElement } from "../canvas/elements/ResistorElement.js";
+import { ElementFactory } from "./ElementFactory.js";
+import { PalettePanel } from "./PalettePanel.js"; // se for montar aqui (opcional)
 
 export class AppShell {
   constructor({ canvasEl, grid = 8 } = {}) {
     this.bus = new EventBus();
     this.model = new CanvasModel({ grid });
     this.view = new CanvasView(canvasEl, this.model);
+
+    // zona de drop no canvas
+    canvasEl.addEventListener("dragover", (e) => {
+      e.preventDefault(); // necessário para permitir drop
+      e.dataTransfer.dropEffect = "copy";
+    });
+
+    canvasEl.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData("text/plain");
+      if (!ElementFactory.has(type)) return;
+
+      // posição do mouse -> mundo
+      const [wx, wy] = this.view.clientToWorld(e.clientX, e.clientY);
+      const [gx, gy] = this.#snapToGrid(wx, wy, this.model.grid);
+
+      const el = ElementFactory.create(type, gx, gy);
+      this.addElement(el);
+      // seleciona o novo elemento
+      this.model.selection.set([el]);
+      this.view.render();
+    });
+
+    // render inicial à prova de layout tardio
+    requestAnimationFrame(() => this.view.render());
+
+    // Redesenhar quando o canvas for redimensionado
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => this.view.resize());
+      ro.observe(canvasEl);
+      this._ro = ro; // manter referência
+    } else {
+      window.addEventListener("resize", () => this.view.resize());
+    }
 
     canvasEl.addEventListener("click", (e) => {
       const el = this.view.pickAtClientPoint(e.clientX, e.clientY);
@@ -50,5 +86,11 @@ export class AppShell {
     this.view.originX += ((rect.width / 2) - px2) / this.view.scale;
     this.view.originY += ((rect.height / 2) - py2) / this.view.scale;
     this.view.render();
+  }
+
+  #snapToGrid(x, y, step) {
+    const sx = Math.round(x / step) * step;
+    const sy = Math.round(y / step) * step;
+    return [sx, sy];
   }
 }

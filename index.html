@@ -1,20 +1,15 @@
-<canvas id="schematic" style="width: 800px; height: 500px; border: 1px solid #333"></canvas>
-<button id="zin">Zoom +</button>
-<button id="zout">Zoom −</button>
-<button id="clr">Limpar</button>
+<div id="palette"></div>
+<div id="toolbar"></div>
+<canvas id="schematic" style="width: 800px; height: 500px; border: 1px solid #333; margin-top:8px"></canvas>
 
 <script type="module">
   import { AppShell } from "./src/app/AppShell.js";
-  import { WireElement } from "./src/canvas/elements/WireElement.js";
+  import { CommandBar } from "./src/app/CommandBar.js";
+  import { PalettePanel } from "./src/app/PalettePanel.js";
 
   const canvas = document.getElementById("schematic");
   const app = new AppShell({ canvasEl: canvas, grid: 8 });
 
-  // adiciona um fio de exemplo
-  app.addElement(new WireElement(16, 16, 80, 48));
-
-  // comandos
-  document.getElementById("zin").onclick  = () => app.bus.publish("command:zoomIn");
-  document.getElementById("zout").onclick = () => app.bus.publish("command:zoomOut");
-  document.getElementById("clr").onclick  = () => app.bus.publish("command:clear");
+  new CommandBar({ container: document.getElementById("toolbar"), bus: app.bus });
+  new PalettePanel({ container: document.getElementById("palette"), bus: app.bus });
 </script>
