@@ -36,6 +36,8 @@ import { SelectionMarqueeController } from "./SelectionMarqueeController.js";
 import { CommandStack } from "./CommandStack.js";
 import { AddElementCommand } from "./commands/AddElementCommand.js";
 import { RemoveSelectionCommand } from "./commands/RemoveSelectionCommand.js";
+import { RotateSelectionCommand } from "./commands/RotateSelectionCommand.js";
+
 
 export class AppShell {
   /**
@@ -419,6 +421,13 @@ export class AppShell {
     sub("command:undo", () => { if (this.commands?.undo()) this.scheduleRender(); });
     sub("command:redo", () => { if (this.commands?.redo()) this.scheduleRender(); });
 
+    // Rotação (CW/CCW)
+    // sub("command:rotateCW",  () => this.#rotateSelection(+1));
+    // sub("command:rotateCCW", () => this.#rotateSelection(-1));
+    // sub("command:rotateCW",  (p) => this.#rotateSelection(p?.steps ?? 1));
+    // sub("command:rotateCCW", (p) => this.#rotateSelection(-(p?.steps ?? 1)));
+    sub("command:rotateCW",  (p) => this.#rotateSelection(p?.steps ?? 1));
+    sub("command:rotateCCW", (p) => this.#rotateSelection(-(p?.steps ?? 1)));
   }
 
   #bindKeyboardShortcuts(canvasEl) {
@@ -454,6 +463,10 @@ export class AppShell {
                  ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
         this.bus.publish("command:redo");
         e.preventDefault();
+      } else if (!e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) {
+        // R gira CW, Shift+R gira CCW
+        this.bus.publish(e.shiftKey ? "command:rotateCCW" : "command:rotateCW");
+        e.preventDefault();
       }
     };
 
@@ -466,6 +479,39 @@ export class AppShell {
     const sy = Math.round(y / step) * step;
     return [sx, sy];
   }
+  
+  #rotateSelection(steps) {
+    const items = this.model.selection.getAll();
+    if (!items.length) return;
+    // usa CommandStack para habilitar Undo/Redo da rotação em grupo
+    if (this.commands) {
+      this.commands.pushAndExecute(new RotateSelectionCommand({ app: this, steps }));
+    } else {
+      // fallback sem stack (não deve acontecer no seu app):
+      const ang = (Math.PI / 4) * steps;
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      // centro da seleção
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const el of items) {
+        const b = el.getBounds?.() ?? { x: el.x, y: el.y, w: 0, h: 0 };
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.w);
+        maxY = Math.max(maxY, b.y + b.h);
+      }
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      // aplica
+      for (const el of items) {
+        const vx = el.x - cx, vy = el.y - cy;
+        el.x = cx + (vx * cos - vy * sin);
+        el.y = cy + (vx * sin + vy * cos);
+        el.rotation = ((el.rotation ?? 0) + steps) & 7;
+        el.updateCoords?.();
+    }
+      this.scheduleRender();
+    }
+  }
+
 }
 
 export default AppShell;

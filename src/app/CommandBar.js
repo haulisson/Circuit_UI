@@ -96,11 +96,20 @@ export class CommandBar {
       return s;
     };
 
+    // ------- grupo: undo/redo (NOVO) -------
+    const bUndo = mkBtn("undo", "↩︎ Undo", "Desfazer (Ctrl+Z)", () => this.bus.publish("command:undo"));
+    const bRedo = mkBtn("redo", "↪︎ Redo", "Refazer (Ctrl+Y / Ctrl+Shift+Z)", () => this.bus.publish("command:redo"));
+
     // ------- grupo: navegação/zoom -------
     const bZoomIn  = mkBtn("zoomIn",  "🔎＋", "Zoom In (Shift+=)", () => this.bus.publish("command:zoomIn"));
     const bZoomOut = mkBtn("zoomOut", "🔎－", "Zoom Out (-)",      () => this.bus.publish("command:zoomOut"));
     const bZoom0   = mkBtn("zoom0",   "🔁",  "Reset Zoom (Ctrl+0)",() => this.bus.publish("command:zoomReset"));
     const bCenter  = mkBtn("center",  "🎯",  "Centralizar seleção",() => this.bus.publish("command:centerOnSelection"));
+    
+    // ------- grupo: rotação (NOVO) -------
+    // Rotaciona seleção em passos de 45° (steps:1). Shift+R já funciona no teclado.
+    const bRotCCW = mkBtn("rotCCW", "↺", "Rotacionar -45°", () => this.bus.publish("command:rotateCCW", { steps: 1 }));
+    const bRotCW  = mkBtn("rotCW",  "↻", "Rotacionar +45°", () => this.bus.publish("command:rotateCW",  { steps: 1 }));
 
     // ------- grupo: edição -------
     const bAddWire = mkBtn("addWire", "➕ Wire",      "Adicionar fio",       () => this.bus.publish("command:addWire"));
@@ -132,7 +141,11 @@ export class CommandBar {
     });
 
     // Montagem
+    el.appendChild(group([bUndo, bRedo]));               // NOVO
+    el.appendChild(sep());
     el.appendChild(group([bZoomIn, bZoomOut, bZoom0, bCenter]));
+    el.appendChild(sep());
+    el.appendChild(group([bRotCCW, bRotCW]));            // << NOVO grupo rotação
     el.appendChild(sep());
     el.appendChild(group([bAddWire, bAddRes, bDelete, bClear]));
     el.appendChild(sep());
@@ -149,9 +162,13 @@ export class CommandBar {
     const disableWhenNoSel = ["del", "center"];
     for (const id of disableWhenNoSel) {
       const b = this._buttons.get(id);
-      if (b) b.disabled = !this._hasSelection;
-      if (b) b.style.opacity = b.disabled ? "0.5" : "1.0";
-      if (b) b.style.cursor = b.disabled ? "not-allowed" : "pointer";
+      // if (b) b.disabled = !this._hasSelection;
+      // if (b) b.style.opacity = b.disabled ? "0.5" : "1.0";
+      // if (b) b.style.cursor = b.disabled ? "not-allowed" : "pointer";
+      if (!b) continue;
+      b.disabled = !this._hasSelection;
+      b.style.opacity = b.disabled ? "0.5" : "1.0";
+      b.style.cursor = b.disabled ? "not-allowed" : "pointer";
     }
   }
 

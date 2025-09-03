@@ -1,29 +1,37 @@
-// WireElement.js
-// Representa um fio entre dois pontos (coordenadas absolutas no momento da criação).
-
+// WireElement.js — usando BaseElement (options) + portas nomeadas "A"/"B"
 import { BaseElement } from "./BaseElement.js";
 
 export class WireElement extends BaseElement {
   constructor(x1, y1, x2, y2) {
-    super("wire", x1, y1, 0);
-    this.dx = x2 - x1;
-    this.dy = y2 - y1;
+    super({
+      type: "wire",
+      x: x1,
+      y: y1,
+      rotation: 0,
+      properties: {}
+    });
 
-    // dois CPs: origem (0,0) e destino (dx,dy)
-    this.addConnection(0, 0);
-    this.addConnection(this.dx, this.dy);
+    // offset relativo da ponta B
+    this.dx = (typeof x2 === "number" ? x2 : x1 + 64) - x1;
+    this.dy = (typeof y2 === "number" ? y2 : y1      ) - y1;
 
-    // bbox inicial
+    // Portas nomeadas
+    this.addPort("A", 0, 0);
+    this.addPort("B", this.dx, this.dy);
+
     this.updateCoords();
   }
 
   otherEnd(cp) {
-    return cp === this.connections[0] ? this.connections[1] : this.connections[0];
+    const a = this.getPort("A");
+    const b = this.getPort("B");
+    return (cp === a) ? b : a;
   }
 
   draw(ctx) {
-    const a = this.connections[0];
-    const b = this.connections[1];
+    if (!this.visible) return;
+    const a = this.getPort("A");
+    const b = this.getPort("B");
 
     ctx.save();
     ctx.lineWidth = 2;
@@ -35,18 +43,16 @@ export class WireElement extends BaseElement {
     ctx.restore();
   }
 
-  /** Teste de proximidade ponto-segmento para seleção/“hit test” */
   near(x, y, tolerance = 5) {
-    const a = this.connections[0];
-    const b = this.connections[1];
+    const a = this.getPort("A");
+    const b = this.getPort("B");
     const dist = pointToSegmentDistance(x, y, a.x, a.y, b.x, b.y);
     return dist <= tolerance;
   }
 
-  /** BBox mundial baseado nos dois pontos */
   getBounds() {
-    const a = this.connections[0];
-    const b = this.connections[1];
+    const a = this.getPort("A");
+    const b = this.getPort("B");
     const minX = Math.min(a.x, b.x), minY = Math.min(a.y, b.y);
     const maxX = Math.max(a.x, b.x), maxY = Math.max(a.y, b.y);
     return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
@@ -57,13 +63,12 @@ export class WireElement extends BaseElement {
   }
 
   toNetlist() {
-    const a = this.connections[0];
-    const b = this.connections[1];
+    const a = this.getPort("A");
+    const b = this.getPort("B");
     return ["w", [a.x, a.y, b.x, b.y]];
   }
 }
 
-/** Distância do ponto (px,py) ao segmento AB */
 function pointToSegmentDistance(px, py, ax, ay, bx, by) {
   const vx = bx - ax, vy = by - ay;
   const wx = px - ax, wy = py - ay;
