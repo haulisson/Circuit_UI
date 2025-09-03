@@ -21,42 +21,29 @@
 
 ## 2) Layout Geral do Projeto
 
-src/
-app/ # Orquestração e widgets da UI
-AppShell.js # Ponto central da UI (mediador)
-CommandBar.js # Barra de comandos (novo, abrir, salvar, zoom, undo/redo, export, run)
-PalettePanel.js # Paleta/galeria de elementos (drag & drop)
-WindowManager.js # Janelas flutuantes/móveis e seus conteúdos
-ToastService.js # Mensagens não bloqueantes (info, warn, error)
-EventBus.js # Barramento de eventos (publish/subscribe)
-
-canvas/ # Modelo e visualização do diagrama
-CanvasModel.js # Grafo/coleção de elementos e seleção
-CanvasView.js # Renderização e interações do canvas
-SelectionModel.js # Estado de seleção (única/múltipla/retângulo de seleção)
-HitTestService.js # Hit-test para seleção/arraste/edição
-elements/ # Tipos concretos de elementos do diagrama
-BaseElement.js
-WireElement.js
-LabelElement.js
-ConnectionPoint.js
-ResistorElement.js
-CapacitorElement.js
-GroundElement.js
-SourceElement.js
-AmmeterElement.js
-ProbeElement.js
-
-services/ # Serviços sem estado de UI (testáveis isoladamente)
-NetlistExporter.js # Gera netlist a partir do CanvasModel
-SimulationEngine.js # (Futuro) Porta para SPICE/WASM/outro backend
-PlottingService.js # Plota resultados em uma janela (gráfico)
-
-ui/ # Conteúdos específicos exibidos em janelas
-views/
-NetlistView.js # Visualização de netlist (somente texto/readonly)
-GraphView.js # Visualização de gráficos (resultados de simulação)
-HelpView.js # Ajuda/atalhos
+| Caminho                            | Descrição                                                              |
+| ---------------------------------- | ---------------------------------------------------------------------- |
+| `src/app/`                         | Orquestração da interface e widgets principais.                        |
+| `src/app/AppShell.js`              | Ponto central da UI (mediador entre módulos).                          |
+| `src/app/CommandBar.js`            | Barra de comandos (novo, abrir, salvar, zoom, undo/redo, export, run). |
+| `src/app/PalettePanel.js`          | Paleta/galeria de elementos (drag & drop).                             |
+| `src/app/WindowManager.js`         | Controle de janelas flutuantes/móveis.                                 |
+| `src/app/ToastService.js`          | Mensagens não bloqueantes (info, warn, error).                         |
+| `src/app/EventBus.js`              | Barramento de eventos (publish/subscribe).                             |
+| `src/canvas/`                      | Modelo e visualização do diagrama.                                     |
+| `src/canvas/CanvasModel.js`        | Estrutura de grafo: elementos e seleção.                               |
+| `src/canvas/CanvasView.js`         | Renderização e interações do canvas.                                   |
+| `src/canvas/SelectionModel.js`     | Estado de seleção (única, múltipla, retângulo).                        |
+| `src/canvas/HitTestService.js`     | Serviço de hit-test para seleção/arraste/edição.                       |
+| `src/canvas/elements/`             | Tipos concretos de elementos do diagrama.                              |
+| `src/services/`                    | Serviços independentes da UI (testáveis isoladamente).                 |
+| `src/services/NetlistExporter.js`  | Gera netlist a partir do `CanvasModel`.                                |
+| `src/services/SimulationEngine.js` | (Futuro) Porta para SPICE/WASM/outro backend.                          |
+| `src/services/PlottingService.js`  | Gera gráficos dos resultados em janelas.                               |
+| `src/ui/views/`                    | Conteúdos específicos exibidos em janelas.                             |
+| `src/ui/views/NetlistView.js`      | Visualização de netlist (somente leitura).                             |
+| `src/ui/views/GraphView.js`        | Visualização de gráficos de simulação.                                 |
+| `src/ui/views/HelpView.js`         | Ajuda/atalhos.                                                         |
 
 
 > **Nota:** Se o repositório ainda estiver com nomes “originais”, veja o **Anexo A** (mapa de migração).
@@ -128,138 +115,143 @@ HelpView.js # Ajuda/atalhos
 
 ---
 
-## 4) Contratos/Interfaces (APIs internas)
+## 4) Contratos / Interfaces (APIs internas)
 
-> **Sugestão:** Mesmo em JavaScript, documente as “interfaces” como JSDoc ou tipos d.ts (se usar TypeScript).
+> **Sugestão:** mesmo em JavaScript, documente as “interfaces” como **JSDoc** ou arquivos de tipos `.d.ts` (se usar TypeScript).
 
-- **IRenderable** (para elementos no `CanvasView`)
-  ```ts
-  interface IRenderable {
-    draw(ctx: CanvasRenderingContext2D): void
-    getBounds(): { x: number; y: number; w: number; h: number }
-  }
+### Interfaces principais
 
-IConnectable (elementos com pinos)
+#### `IRenderable` (elementos do `CanvasView`)
+```ts
+interface IRenderable {
+  draw(ctx: CanvasRenderingContext2D): void
+  getBounds(): { x: number; y: number; w: number; h: number }
+}
+```
 
+#### `IConnectable` (elementos com pinos)
+```ts
 interface IConnectable {
   getPins(): ConnectionPoint[]
   hitTestPin(x: number, y: number): ConnectionPoint | null
 }
+```
 
-
-INetlistNode (exportação)
-
+#### `INetlistNode` (exportação)
+```ts
 interface INetlistNode {
-  toNetlist(): string[]     // linhas de netlist (parciais) produzidas pelo elemento
+  toNetlist(): string[] // Linhas de netlist (parciais) produzidas pelo elemento
 }
+```
 
-
-IWindowContent (conteúdos de janelas)
-
+#### `IWindowContent` (conteúdo de janelas)
+```ts
 interface IWindowContent {
   mount(container: HTMLElement): void
   unmount(): void
 }
+```
 
-
-IEventBus
-
+#### `IEventBus`
+```ts
 interface IEventBus {
-  subscribe(topic: string, handler: (payload?: any) => void): () => void  // retorna unsubscribe
+  subscribe(topic: string, handler: (payload?: any) => void): () => void // retorna unsubscribe
   publish(topic: string, payload?: any): void
 }
+```
 
-
-ISimulationEngine (futuro)
-
+#### `ISimulationEngine` (futuro)
+```ts
 interface ISimulationEngine {
   run(netlist: string): Promise<SimResult>
 }
+```
 
-5) Tópicos de Eventos (convenção sugerida)
+---
 
-command:new, command:open, command:save, command:undo, command:redo, command:zoomIn, command:zoomOut, command:exportNetlist, command:runSimulation
+## 5) Tópicos de Eventos (convenção sugerida)
 
-canvas:selectionChanged, canvas:elementAdded, canvas:elementRemoved, canvas:viewportChanged
+- **command:**  
+  `command:new`, `command:open`, `command:save`,  
+  `command:undo`, `command:redo`, `command:zoomIn`, `command:zoomOut`,  
+  `command:exportNetlist`, `command:runSimulation`
 
-palette:dragStart, palette:drop
+- **canvas:**  
+  `canvas:selectionChanged`, `canvas:elementAdded`,  
+  `canvas:elementRemoved`, `canvas:viewportChanged`
 
-netlist:generated, simulation:started, simulation:completed, simulation:failed
+- **palette:**  
+  `palette:dragStart`, `palette:drop`
 
-graph:open, graph:close
+- **netlist / simulation:**  
+  `netlist:generated`, `simulation:started`,  
+  `simulation:completed`, `simulation:failed`
 
-Padrão: domínio:ação (snake-case/kebab-case à escolha, mas seja consistente).
+- **graph:**  
+  `graph:open`, `graph:close`
 
-6) Fluxo Essencial (Visão Geral)
+**Padrão:** `domínio:ação` (usar **kebab-case** ou **snake_case**, mas seja consistente).
 
-Usuário clica em um comando → CommandBar emite command:* via EventBus ou chama AppShell.handleCommand.
+---
 
-AppShell interpreta e:
+## 6) Fluxo Essencial (Visão Geral)
 
-atualiza CanvasModel (ex.: adicionar elemento),
+1. Usuário clica em um comando.  
+   → `CommandBar` emite `command:*` via `EventBus` **ou** chama `AppShell.handleCommand`.
 
-solicita CanvasView.render(model),
+2. `AppShell` interpreta e:
+   - atualiza `CanvasModel` (ex.: adicionar elemento),
+   - solicita `CanvasView.render(model)`,
+   - aciona serviços (`NetlistExporter`, `SimulationEngine`, `PlottingService`),
+   - usa `WindowManager` para abrir `NetlistView` ou `GraphView`.
 
-ou aciona serviços (NetlistExporter, SimulationEngine, PlottingService),
+3. `CanvasView` publica eventos de interação (`canvas:selectionChanged`, etc.) para manter o estado sincronizado.
 
-e usa WindowManager para abrir NetlistView/GraphView.
+---
 
-CanvasView publica eventos de interação (canvas:selectionChanged, etc.) para manter o estado sincronizado.
+## 7) Pontos de Extensão (como contribuir)
 
-7) Pontos de Extensão (como contribuir)
+### Adicionar novo elemento
+1. Criar `YourElement.js` em `canvas/elements/`, estendendo `BaseElement`.
+2. Implementar:
+   - `getPins()`
+   - `draw()`
+   - `toNetlist()`
+3. Registrar no `PalettePanel`.
+4. Opcional: adicionar ícone/preview no catálogo.
 
-Adicionar novo elemento
+### Adicionar comando na `CommandBar`
+1. Definir ação (`command:yourAction`).
+2. Mapear handler em `AppShell.handleCommand`.
+3. (Se houver undo/redo) modelar como `ICommand` com `execute/undo`.
 
-Criar YourElement.js em canvas/elements/ estendendo BaseElement.
+### Plugar um `SimulationEngine`
+1. Implementar `ISimulationEngine`.
+2. Injetar no `AppShell` (composição).
+3. Padronizar `SimResult` (tempo, séries, metadados).
 
-Implementar getPins(), draw(), toNetlist().
+### Criar nova janela (`WindowManager`)
+1. Implementar `IWindowContent` (ex.: `BodePlotView`).
+2. Abrir via `WindowManager.open("bode", content)`.
 
-Registrar no PalettePanel.
+---
 
-Opcional: ícone/preview no catálogo.
+## 8) Qualidade, Testes e Estilo
 
-Adicionar comando na CommandBar
+- **Testes de unidade**
+  - `services/` e `canvas/` devem ser testáveis sem DOM.
+  - `CanvasView` pode ser testado com mocks/headless canvas.
+- **Lint/Format**: usar **ESLint + Prettier** com regras padronizadas.
+- **Commits/PRs**: mensagens claras, PRs pequenos, incluir captura/descrição (GIF opcional).
 
-Definir ação (command:yourAction).
+---
 
-Mapear handler em AppShell (método handleCommand).
+## 9) Roadmap (alto nível)
 
-(Se houver undo/redo) modelar como ICommand com execute/undo.
+- `SimulationEngine` com backend **SPICE (WASM)**.  
+- Undo/Redo via **Command Pattern** com histórico no `AppShell`.  
+- Roteamento de `WireElement` com snapping e auto-ortogonal.  
+- Agrupamento (`group/ungroup`) nativo no `SelectionModel`.  
+- Salvamento/abertura de projeto (`JSON`) com versões compatíveis.  
 
-Plugar um SimulationEngine
 
-Implementar ISimulationEngine.
-
-Injetar no AppShell (composição).
-
-Padronizar SimResult (tempo, séries, metadados).
-
-Nova janela (WindowManager)
-
-Criar um IWindowContent (ex.: BodePlotView).
-
-Abrir com WindowManager.open("bode", content).
-
-8) Qualidade, Testes e Estilo
-
-Testes de unidade:
-
-services/ e canvas/ devem ser testáveis sem DOM.
-
-CanvasView pode ser testado com canvas mock/headless.
-
-Lint/Format: ESLint + Prettier (regras padronizadas).
-
-Commits/PRs: mensagens claras, PRs pequenos, com captura/descrição (GIF opcional).
-
-9) Roadmap (alto nível)
-
-SimulationEngine com backend SPICE (WASM).
-
-Undo/Redo via Command Pattern e histórico no AppShell.
-
-Roteamento de WireElement com snapping e auto-ortogonal.
-
-Agrupamento (group/ungroup) nativo em SelectionModel.
-
-Salvamento/abertura de projeto (JSON) com versões compatíveis.
