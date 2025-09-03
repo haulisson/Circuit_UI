@@ -76,6 +76,22 @@ export class CanvasModel {
     });
   }
 
+  elementsInRect(rect) {
+    const out = [];
+    const rx = rect.x, ry = rect.y, rw = rect.w, rh = rect.h;
+    const r2x = rx + rw, r2y = ry + rh;
+
+    for (const el of this.elements) {
+      if (typeof el.getBounds !== "function") continue;
+      const b = el.getBounds();
+      const bx2 = b.x + b.w, by2 = b.y + b.h;
+      // interseção AABB simples
+      const intersects = (b.x <= r2x) && (bx2 >= rx) && (b.y <= r2y) && (by2 >= ry);
+      if (intersects) out.push(el);
+    }
+    return out;
+  }
+
   toJSON() {
     return {
       grid: this.grid,

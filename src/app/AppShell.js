@@ -31,6 +31,9 @@ import { EventBus } from "./EventBus.js";
 import { CanvasModel } from "../canvas/CanvasModel.js";
 import { CanvasView } from "../canvas/CanvasView.js";
 import { ElementFactory } from "./ElementFactory.js";
+import { DragMoveController } from "./DragMoveController.js";
+import { SelectionMarqueeController } from "./SelectionMarqueeController.js";
+
 
 export class AppShell {
   /**
@@ -49,9 +52,10 @@ export class AppShell {
     this.view = new CanvasView(canvasEl, this.model);
 
     // Config
-    this.grid = grid;
-    this.plugins = Array.isArray(plugins) ? plugins : [];
+    // >>> garantir plugins antes dos controllers <<<
+    this.plugins = Array.isArray(plugins) ? [...plugins] : [];
     this.enableShortcuts = enableShortcuts;
+    this.grid = grid;
 
     // Estado interno
     this._ro = null;                  // ResizeObserver
@@ -61,14 +65,20 @@ export class AppShell {
     this._unsubs = [];                // para cleanup (bus unsubscribes)
 
     // Inicializações
+    // (listeners, comandos, resize observer, etc.)
     this.#wireCanvasInteractions(canvasEl);
     this.#bindDefaultCommands();
     if (this.enableShortcuts) this.#bindKeyboardShortcuts(canvasEl);
     this.#observeResize(canvasEl);
 
+    //Controllers
+    // >>> agora sim: controllers de drag e marquee <<<
+    this._dragCtl    = new DragMoveController({ canvasEl, app: this });
+    this._marqueeCtl = new SelectionMarqueeController({ canvasEl, app: this });
+
     // Render inicial robusto (após layout do DOM)
     requestAnimationFrame(() => this.render());
-
+    
     // Plugins: onInit
     this.#callPlugins("onInit", this.#ctx());
   }
@@ -258,6 +268,9 @@ export class AppShell {
     // RAF
     if (this._rafId) cancelAnimationFrame(this._rafId);
     this._rafId = 0;
+
+    if (this._dragCtl?.destroy)    this._dragCtl.destroy();
+    if (this._marqueeCtl?.destroy) this._marqueeCtl.destroy();
   }
 
   /* ===================== Internals ===================== */
@@ -273,8 +286,9 @@ export class AppShell {
   }
 
   #callPlugins(hookName, ctx, arg) {
+    const list = Array.isArray(this.plugins) ? this.plugins : [];
     let proceed = true;
-    for (const p of this.plugins) {
+    for (const p of list) {
       const fn = p && p[hookName];
       if (typeof fn === "function") {
         const r = (arg !== undefined) ? fn.call(p, ctx, arg) : fn.call(p, ctx);
@@ -299,6 +313,8 @@ export class AppShell {
   #wireCanvasInteractions(canvasEl) {
     // Seleção por clique (Shift/Ctrl para toggle)
     const onClick = (e) => {
+      // Se a seleção por marquee acabou de rodar, ignore este clique
+      if (this._suppressNextClick) { this._suppressNextClick = false; return; }
       const el = this.view.pickAtClientPoint(e.clientX, e.clientY);
       const multi = e.shiftKey || e.ctrlKey || e.metaKey;
       if (!multi) this.model.selection.clear();
@@ -308,6 +324,7 @@ export class AppShell {
       }
       this.scheduleRender();
     };
+    
     canvasEl.addEventListener("click", onClick);
     this._handlers.push(() => canvasEl.removeEventListener("click", onClick));
 
