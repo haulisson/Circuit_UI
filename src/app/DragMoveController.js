@@ -4,6 +4,8 @@
 // - Arrastar com botão esquerdo sobre um elemento: move seleção (snap à grade)
 // - Mantém compatível com pan do CanvasView (ALT/btn do meio)
 
+import { MoveSelectionCommand } from "./commands/MoveSelectionCommand.js";
+
 export class DragMoveController {
   /**
    * @param {Object} opts
@@ -27,6 +29,8 @@ export class DragMoveController {
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp   = this._onPointerUp.bind(this);
+
+    this._pendingMove = null; // comando em construção durante o drag
 
     // eventos
     // preferimos Pointer Events, mas caímos para mouse se não tiver
@@ -86,6 +90,11 @@ export class DragMoveController {
       // preparar arrasto
       this.dragging = true;
       this._snapshotSelection();
+      // cria comando de movimento com startPos (end será definido no mouseup)
+      this._pendingMove = new MoveSelectionCommand({
+        app: this.app,
+        startPos: new Map(this.selStartPos)
+      });
       e.preventDefault();
     } else {
       // clique no vazio: limpa seleção (se não multi)
@@ -94,6 +103,7 @@ export class DragMoveController {
         this.app.scheduleRender();
       }
       this.dragging = false;
+      this._pendingMove = null;
     }
   }
 
@@ -140,7 +150,24 @@ export class DragMoveController {
   }
 
   _onPointerUp(_e) {
+    if (!this.dragging) { this.selStartPos.clear(); return; }
     this.dragging = false;
+    
+    // Captura endPos apenas se houve movimento real
+    const items = this.app.model.selection.getAll();
+    const endPos = new Map();
+    let moved = false;
+    for (const el of items) {
+      endPos.set(el, { x: el.x, y: el.y });
+      const start = this.selStartPos.get(el);
+      if (start && (start.x !== el.x || start.y !== el.y)) moved = true;
+    }
+    if (this._pendingMove && moved) {
+      this._pendingMove.setEndPositions(endPos);
+      this.app.commands?.pushAndExecute(this._pendingMove);
+    }
+    this._pendingMove = null;
+
     this.selStartPos.clear();
   }
 

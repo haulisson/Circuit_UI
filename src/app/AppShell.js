@@ -33,7 +33,9 @@ import { CanvasView } from "../canvas/CanvasView.js";
 import { ElementFactory } from "./ElementFactory.js";
 import { DragMoveController } from "./DragMoveController.js";
 import { SelectionMarqueeController } from "./SelectionMarqueeController.js";
-
+import { CommandStack } from "./CommandStack.js";
+import { AddElementCommand } from "./commands/AddElementCommand.js";
+import { RemoveSelectionCommand } from "./commands/RemoveSelectionCommand.js";
 
 export class AppShell {
   /**
@@ -76,6 +78,9 @@ export class AppShell {
     this._dragCtl    = new DragMoveController({ canvasEl, app: this });
     this._marqueeCtl = new SelectionMarqueeController({ canvasEl, app: this });
 
+    // Pilha de comandos
+    this.commands = new CommandStack();
+
     // Render inicial robusto (após layout do DOM)
     requestAnimationFrame(() => this.render());
     
@@ -103,12 +108,39 @@ export class AppShell {
     return el;
   }
 
+  addElement(el, { select = true, recordCommand = true } = {}) {
+    if (!el) return null;
+    const proceed = this.#callPlugins("beforeAddElement", this.#ctx(), el);
+    if (proceed === false) return null;
+    if (recordCommand && this.commands) {
+      this.commands.pushAndExecute(new AddElementCommand({ app: this, element: el, select }));
+    } else {
+      this.model.add(el);
+      if (select) this.model.selection.set([el]);
+      this.scheduleRender();
+    }
+    this.#callPlugins("afterAddElement", this.#ctx(), el);
+    return el;
+  }
+
   /** Remove todos os itens selecionados. */
   removeSelected() {
     const sel = this.model.selection.getAll();
     sel.forEach(el => this.model.remove(el));
     this.scheduleRender();
     return sel.length;
+  }
+  removeSelected() {
+    const count = this.model.selection.getAll().length;
+    if (!count) return 0;
+    if (this.commands) {
+      this.commands.pushAndExecute(new RemoveSelectionCommand({ app: this }));
+    } else {
+      const sel = this.model.selection.getAll();
+      sel.forEach(el => this.model.remove(el));
+      this.scheduleRender();
+    }
+    return count;
   }
 
   /** Exporta o projeto (modelo) para JSON string. */
@@ -324,7 +356,7 @@ export class AppShell {
       }
       this.scheduleRender();
     };
-    
+
     canvasEl.addEventListener("click", onClick);
     this._handlers.push(() => canvasEl.removeEventListener("click", onClick));
 
@@ -383,6 +415,10 @@ export class AppShell {
       const el = ElementFactory.create("resistor", 160, 80);
       this.addElement(el, { select: true });
     });
+    // Undo / Redo
+    sub("command:undo", () => { if (this.commands?.undo()) this.scheduleRender(); });
+    sub("command:redo", () => { if (this.commands?.redo()) this.scheduleRender(); });
+
   }
 
   #bindKeyboardShortcuts(canvasEl) {
@@ -410,6 +446,13 @@ export class AppShell {
         e.preventDefault();
       } else if (e.key.toLowerCase() === "v" && e.ctrlKey) {
         // futuro: colar
+        e.preventDefault();
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        this.bus.publish("command:undo");
+        e.preventDefault();
+      } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
+                 ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
+        this.bus.publish("command:redo");
         e.preventDefault();
       }
     };
