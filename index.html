@@ -1,0 +1,23 @@
+<canvas id="schematic" style="width: 800px; height: 500px; border: 1px solid #333"></canvas>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<script type="module">
+  import { CanvasModel } from "./src/canvas/CanvasModel.js";
+  import { CanvasView } from "./src/canvas/CanvasView.js";
+  import { WireElement } from "./src/canvas/elements/WireElement.js";
+
+  const model = new CanvasModel({ grid: 8 });
+  // exemplo: um fio de (16,16) a (80, 48)
+  model.add(new WireElement(16, 16, 80, 48));
+
+  const canvas = document.getElementById("schematic");
+  const view = new CanvasView(canvas, model);
+  view.render();
+
+  // clique para selecionar
+  canvas.addEventListener("click", (e) => {
+    const el = view.pickAtClientPoint(e.clientX, e.clientY);
+    model.selection.clear();
+    if (el) model.selection.add(el);
+    view.render();
+  });
+</script>
