@@ -1,4 +1,4 @@
-# Circuit Sandbox — Arquitetura & Organização de Arquivos
+# Circuit UI — Arquitetura & Organização de Arquivos
 
 > **Objetivo:** Documentar a organização de pastas/módulos, contratos e pontos de extensão da UI para facilitar **remanufatura**, testes e contribuições externas.  
 > **Escopo:** UI e serviços auxiliares; a **máquina de simulação** (engine) entrará depois por meio de uma interface (`SimulationEngine`).
