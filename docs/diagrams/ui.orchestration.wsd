@@ -1,0 +1,146 @@
+@startuml Circuit-Sandbox — UI Orchestration (Refactor-ready)
+
+title UI Orchestration (remanufatura com padrões de projeto)
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #555
+skinparam linetype ortho
+
+package "App (Orquestração)" {
+  class AppShell {
+    +init()
+    +attach(domRoot)
+    +handleCommand(cmd)
+    +openWindow(id, content)
+  }
+  class CommandBar {
+    +dispatch(action)
+  }
+  class PalettePanel {
+    +onDragStart(elementType)
+  }
+  class WindowManager {
+    +open(id, content:IWindowContent)
+    +close(id)
+    +move/resize(id)
+  }
+  class ToastService {
+    +info(msg)
+    +warn(msg)
+    +error(msg)
+  }
+  class EventBus {
+    +subscribe(topic, fn)
+    +publish(topic, payload)
+  }
+}
+
+package "Canvas" {
+  class CanvasModel {
+    +add(element)
+    +remove(element)
+    +getElements()
+    +selection : SelectionModel
+  }
+  class CanvasView {
+    +render(model:CanvasModel)
+    +hitTest(x,y)
+    +pan/zoom()
+  }
+  class SelectionModel {
+    +select(targets)
+    +clear()
+  }
+  class HitTestService {
+    +hitElement(x,y): BaseElement?
+  }
+}
+
+package "Elementos" {
+  class BaseElement {
+    +rotate()/flip()
+    +toNetlist(): string[]
+  }
+  class WireElement
+  class LabelElement
+  class ConnectionPoint
+  class ResistorElement
+  class CapacitorElement
+  class GroundElement
+  class SourceElement
+  class AmmeterElement
+  class ProbeElement
+
+  BaseElement <|-- WireElement
+  BaseElement <|-- LabelElement
+  BaseElement <|-- ResistorElement
+  BaseElement <|-- CapacitorElement
+  BaseElement <|-- GroundElement
+  BaseElement <|-- SourceElement
+  BaseElement <|-- AmmeterElement
+  BaseElement <|-- ProbeElement
+}
+
+package "Serviços" {
+  class NetlistExporter {
+    +from(model:CanvasModel): string
+  }
+  class SimulationEngine {  /'futuro'/
+    +run(netlist:string): SimResult
+  }
+  class PlottingService {
+    +plot(result:SimResult)
+  }
+}
+
+' ------- Composições/Dependências centrais -------
+AppShell *-- CommandBar
+AppShell *-- PalettePanel
+AppShell *-- WindowManager
+AppShell ..> ToastService
+AppShell ..> EventBus
+
+AppShell *-- CanvasModel
+AppShell *-- CanvasView
+CanvasModel *-- SelectionModel
+CanvasView ..> HitTestService
+
+CanvasModel o-- BaseElement
+BaseElement o-- ConnectionPoint
+
+' Fluxo de interação
+CommandBar --> AppShell : actions (new/open/save/undo/redo/zoom/run/export...)
+PalettePanel --> AppShell : elementType (drag-drop)
+AppShell --> CanvasModel : add/remove/select
+AppShell --> CanvasView  : render/update
+
+' Eventos desacoplados
+EventBus <.. CommandBar : publish "command:*"
+EventBus <.. CanvasView : publish "canvas:selectionChanged"
+AppShell ..> EventBus    : subscribe to all relevant
+
+' Netlist/Sim/Plot
+AppShell --> NetlistExporter : export()
+AppShell --> WindowManager   : open(NetlistView)
+AppShell --> SimulationEngine: run(netlist)  ' (futuro)
+SimulationEngine --> AppShell: SimResult     ' (futuro)
+AppShell --> PlottingService : plot(result)
+WindowManager ..> PlottingService
+
+note right of AppShell
+  AppShell é o orquestrador:
+  - centraliza comandos da UI
+  - traduz ações em mutações no CanvasModel
+  - pede render ao CanvasView
+  - integra Netlist/Simulation/Plot
+  - usa EventBus para desacoplar
+end note
+
+note right of CanvasView
+  CanvasView é apenas visual:
+  - desenho, hit-test e interações
+  - sem conhecimento de regras elétricas
+end note
+
+@enduml

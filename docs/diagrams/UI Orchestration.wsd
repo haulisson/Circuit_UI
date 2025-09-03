@@ -1,0 +1,108 @@
+@startuml Circuit Simulator — UI Orchestration
+
+title UI Orchestration (Schematic-centric)
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #444
+skinparam linetype ortho
+
+' ===================== PACOTES =====================
+
+package "Core" {
+  class Schematic
+  class Component
+  class ConnectionPoint
+  class Wire
+  class Label
+}
+
+package "UI Tools" {
+  class ToolBar
+  class PartsBin
+  class UIWindows
+  class Message
+}
+
+package "Drawing & Events" {
+  class Drawing
+  class Event
+}
+
+package "Simulation" {
+  class Netlist
+  class Simulation
+  class Graphing
+}
+
+package "Elements" {
+  class Resistor
+  class Capacitor
+  class Source
+  class Ground
+  class Probe
+  class Ammeter
+}
+
+' ===================== RELAÇÕES =====================
+
+' Orquestração central
+Schematic *-- ToolBar
+Schematic *-- PartsBin
+Schematic *-- UIWindows
+Schematic *-- Message
+Schematic *-- Drawing
+Schematic *-- Event
+Schematic *-- Netlist
+Schematic *-- Simulation
+Schematic *-- Graphing
+
+' Estrutura de diagrama
+Schematic o-- Component
+Component o-- ConnectionPoint
+Component <|-- Wire
+Component <|-- Label
+Component <|-- Resistor
+Component <|-- Capacitor
+Component <|-- Source
+Component <|-- Ground
+Component <|-- Probe
+Component <|-- Ammeter
+
+' Fluxo de uso
+ToolBar --> Schematic : comandos (novo, salvar, simular...)
+PartsBin --> Schematic : drag&drop
+Drawing --> Schematic : render()
+Event --> Schematic : interações usuário
+Netlist --> Simulation : run()
+Simulation --> Graphing : resultados
+Graphing --> UIWindows : mostrar gráfico
+Message <.. Schematic : status/info
+
+' ===================== NOTAS =====================
+note left of Schematic
+  **Schematic = Orquestrador**
+  - inicializa UI
+  - integra ToolBar, PartsBin, Windows, Message
+  - manipula Canvas (Drawing, Event)
+  - gera Netlist
+  - executa Simulation
+  - mostra Graphing
+end note
+
+note top of Component
+  **Component = base**
+  - propriedades
+  - conexões
+  - desenho
+  - edição
+  - especializações: Resistor, Capacitor, etc.
+end note
+
+note top of UIWindows
+  **UIWindows = gerenciador**
+  - janelas flutuantes
+  - redimensionar, mover, fechar
+end note
+
+@enduml
