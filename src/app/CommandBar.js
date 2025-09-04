@@ -38,7 +38,7 @@ export class CommandBar {
   /** Desmonta listeners (se precisar). */
   destroy() {
     for (const u of this._unsubs) {
-      try { u(); } catch {}
+      try { u(); } catch { }
     }
     this._unsubs.length = 0;
   }
@@ -101,24 +101,29 @@ export class CommandBar {
     const bRedo = mkBtn("redo", "↪︎ Redo", "Refazer (Ctrl+Y / Ctrl+Shift+Z)", () => this.bus.publish("command:redo"));
 
     // ------- grupo: navegação/zoom -------
-    const bZoomIn  = mkBtn("zoomIn",  "🔎＋", "Zoom In (Shift+=)", () => this.bus.publish("command:zoomIn"));
-    const bZoomOut = mkBtn("zoomOut", "🔎－", "Zoom Out (-)",      () => this.bus.publish("command:zoomOut"));
-    const bZoom0   = mkBtn("zoom0",   "🔁",  "Reset Zoom (Ctrl+0)",() => this.bus.publish("command:zoomReset"));
-    const bCenter  = mkBtn("center",  "🎯",  "Centralizar seleção",() => this.bus.publish("command:centerOnSelection"));
-    
+    const bZoomIn = mkBtn("zoomIn", "🔎＋", "Zoom In (Shift+=)", () => this.bus.publish("command:zoomIn"));
+    const bZoomOut = mkBtn("zoomOut", "🔎－", "Zoom Out (-)", () => this.bus.publish("command:zoomOut"));
+    const bZoom0 = mkBtn("zoom0", "🔁", "Reset Zoom (Ctrl+0)", () => this.bus.publish("command:zoomReset"));
+    const bCenter = mkBtn("center", "🎯", "Centralizar seleção", () => this.bus.publish("command:centerOnSelection"));
+
     // ------- grupo: rotação (NOVO) -------
     // Rotaciona seleção em passos de 45° (steps:1). Shift+R já funciona no teclado.
     const bRotCCW = mkBtn("rotCCW", "↺", "Rotacionar -45°", () => this.bus.publish("command:rotateCCW", { steps: 1 }));
-    const bRotCW  = mkBtn("rotCW",  "↻", "Rotacionar +45°", () => this.bus.publish("command:rotateCW",  { steps: 1 }));
+    const bRotCW = mkBtn("rotCW", "↻", "Rotacionar +45°", () => this.bus.publish("command:rotateCW", { steps: 1 }));
 
     // ------- grupo: edição -------
-    const bAddWire = mkBtn("addWire", "➕ Wire",      "Adicionar fio",       () => this.bus.publish("command:addWire"));
-    const bAddRes  = mkBtn("addRes",  "➕ Resistor",  "Adicionar resistor",  () => this.bus.publish("command:addResistor"));
-    const bDelete  = mkBtn("del",     "🗑️ Del",      "Excluir seleção (Del)",() => this.bus.publish("command:deleteSelected"));
-    const bClear   = mkBtn("clear",   "🧹 Limpar",    "Limpar projeto",       () => this.bus.publish("command:clear"));
+    const bAddWire = mkBtn("addWire", "➕ Wire", "Adicionar fio", () => this.bus.publish("command:addWire"));
+    const bAddRes = mkBtn("addRes", "➕ Resistor", "Adicionar resistor", () => this.bus.publish("command:addResistor"));
+    const bDelete = mkBtn("del", "🗑️ Del", "Excluir seleção (Del)", () => this.bus.publish("command:deleteSelected"));
+    const bClear = mkBtn("clear", "🧹 Limpar", "Limpar projeto", () => this.bus.publish("command:clear"));
 
     // Dentro do CommandBar.js, depois do grupo de arquivo:
     const bNetlist = mkBtn("netlist", "🧾 Netlist", "Abrir janela de netlist", () => this.bus.publish("ui:openNetlist"));
+    // …onde você monta os grupos de botões:
+    // dentro do #render(), crie os botões:
+    const bRun = mkBtn("run", "▶️ Run", "Executar simulação", () => this.bus.publish("sim:run"));
+    const bStop = mkBtn("stop", "⏹ Stop", "Parar simulação", () => this.bus.publish("sim:stop"));
+    const bGraph = mkBtn("graph", "📈 Graph", "Abrir janela de gráfico", () => this.bus.publish("ui:openGraph"));
     // no CommandBar.js, após o grupo de arquivo:
     const bProps = mkBtn("props", "⚙️ Properties", "Abrir inspector de propriedades", () => this.bus.publish("ui:openInspector"));
 
@@ -158,6 +163,11 @@ export class CommandBar {
     el.appendChild(sep());
     el.appendChild(group([bImport, bExport]));
     el.appendChild(group([bProps]));
+    el.appendChild(group([bImport, bExport, bGraph]));
+    el.appendChild(sep());
+    // ...e, na montagem, ponha num grupo com Import/Export/Netlist (se você já tem):
+    el.appendChild(group([bImport, bExport, bGraph, bRun, bStop]));
+
 
     // Estado inicial
     this.#applyState();

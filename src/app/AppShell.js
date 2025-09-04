@@ -40,6 +40,10 @@ import { RotateSelectionCommand } from "./commands/RotateSelectionCommand.js";
 import { WindowManager } from "./WindowManager.js";
 import { NetlistView } from "../ui/views/NetlistView.js";
 import { PropertyInspectorView } from "../ui/views/PropertyInspectorView.js";
+import { GraphView } from "../ui/views/GraphView.js";
+import { NetlistExporter } from "../services/NetlistExporter.js";
+import { SimulationEngine } from "../services/SimulationEngine.js";
+
 
 export class AppShell {
   /**
@@ -57,6 +61,7 @@ export class AppShell {
     this.model = new CanvasModel({ grid });
     this.view = new CanvasView(canvasEl, this.model);
     this.windows = new WindowManager({ root: document.body });
+    this.sim = new SimulationEngine();
 
     // Config
     // >>> garantir plugins antes dos controllers <<<
@@ -106,9 +111,9 @@ export class AppShell {
 
     this.model.add(el);
     if (select) this.model.selection.set([el]);
-    
-    this.bus.publish("ui:selectionChanged", { 
-      count: this.model.selection.getAll().length 
+
+    this.bus.publish("ui:selectionChanged", {
+      count: this.model.selection.getAll().length
     });
 
     // Plugin hook: afterAddElement
@@ -127,8 +132,8 @@ export class AppShell {
     } else {
       this.model.add(el);
       if (select) this.model.selection.set([el]);
-      this.bus.publish("ui:selectionChanged", { 
-        count: this.model.selection.getAll().length 
+      this.bus.publish("ui:selectionChanged", {
+        count: this.model.selection.getAll().length
       });
       this.scheduleRender();
     }
@@ -573,6 +578,44 @@ export class AppShell {
       win.focus();
     });
 
+    sub("ui:openGraph", () => {
+      const id = "graph";
+      const view = new GraphView({ app: this });
+      this.windows.open({
+        id,
+        title: "Graph",
+        width: 640,
+        height: 360,
+        x: 150, y: 150,
+        content: view.getElement()
+      });
+    });
+
+    // dentro de #bindDefaultCommands():
+    sub("ui:openGraph", () => {
+      const id = "graph";
+      const view = new GraphView({ app: this });
+      const win = this.windows.open({
+        id,
+        title: "Graph",
+        width: 680,
+        height: 420,
+        x: 160, y: 120,
+        content: view.getElement()
+      });
+      win.focus();
+    });
+
+    sub("sim:run", (p) => {
+      const netlist = NetlistExporter.export({ model: this.model });
+      const out = this.sim.run(netlist, p || {});
+      this.#openGraphWithSignals(out.signals);
+    });
+
+    sub("sim:stop", () => {
+      this.sim.stop();
+      // por enquanto, nada assíncrono; mantemos o comando para futuro cancelamento
+    });
 
   }
 
@@ -626,6 +669,8 @@ export class AppShell {
     return [sx, sy];
   }
 
+
+
   #rotateSelection(steps) {
     const items = this.model.selection.getAll();
     if (!items.length) return;
@@ -657,6 +702,25 @@ export class AppShell {
       this.scheduleRender();
     }
   }
+
+  #openGraphWithSignals(signals) {
+    // abre (ou traz à frente) a janela Graph e injeta sinais
+    const id = "graph";
+    let win = this.windows.open({ id, title: "Graph", width: 680, height: 420, x: 160, y: 120 });
+    // se ainda não tem view, crie e acople
+    let container = win.getBody();
+    let view = container.__graphView;
+    if (!view) {
+      view = new GraphView({ app: this, signals });
+      container.innerHTML = "";
+      container.appendChild(view.getElement());
+      container.__graphView = view;
+    } else if (signals) {
+      view.setSignals(signals);
+    }
+    win.focus();
+  }
+
 
 }
 
