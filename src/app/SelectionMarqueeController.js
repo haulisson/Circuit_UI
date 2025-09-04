@@ -126,7 +126,10 @@ export class SelectionMarqueeController {
     this.app._suppressNextClick = true;
     // libera na próxima volta do event loop
     setTimeout(() => { this.app._suppressNextClick = false; }, 0);
-    
+    this.app.bus?.publish("ui:selectionChanged", { 
+      count: this.app.model.selection.getAll().length 
+    });
+
   }
 
   _drawOverlay(ctx2d) {

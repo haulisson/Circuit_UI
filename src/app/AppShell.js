@@ -37,7 +37,9 @@ import { CommandStack } from "./CommandStack.js";
 import { AddElementCommand } from "./commands/AddElementCommand.js";
 import { RemoveSelectionCommand } from "./commands/RemoveSelectionCommand.js";
 import { RotateSelectionCommand } from "./commands/RotateSelectionCommand.js";
-
+import { WindowManager } from "./WindowManager.js";
+import { NetlistView } from "../ui/views/NetlistView.js";
+import { PropertyInspectorView } from "../ui/views/PropertyInspectorView.js";
 
 export class AppShell {
   /**
@@ -54,6 +56,7 @@ export class AppShell {
     this.bus = new EventBus();
     this.model = new CanvasModel({ grid });
     this.view = new CanvasView(canvasEl, this.model);
+    this.windows = new WindowManager({ root: document.body });
 
     // Config
     // >>> garantir plugins antes dos controllers <<<
@@ -77,15 +80,16 @@ export class AppShell {
 
     //Controllers
     // >>> agora sim: controllers de drag e marquee <<<
-    this._dragCtl    = new DragMoveController({ canvasEl, app: this });
+    this._dragCtl = new DragMoveController({ canvasEl, app: this });
     this._marqueeCtl = new SelectionMarqueeController({ canvasEl, app: this });
+
 
     // Pilha de comandos
     this.commands = new CommandStack();
 
     // Render inicial robusto (após layout do DOM)
     requestAnimationFrame(() => this.render());
-    
+
     // Plugins: onInit
     this.#callPlugins("onInit", this.#ctx());
   }
@@ -102,6 +106,10 @@ export class AppShell {
 
     this.model.add(el);
     if (select) this.model.selection.set([el]);
+    
+    this.bus.publish("ui:selectionChanged", { 
+      count: this.model.selection.getAll().length 
+    });
 
     // Plugin hook: afterAddElement
     this.#callPlugins("afterAddElement", this.#ctx(), el);
@@ -119,6 +127,9 @@ export class AppShell {
     } else {
       this.model.add(el);
       if (select) this.model.selection.set([el]);
+      this.bus.publish("ui:selectionChanged", { 
+        count: this.model.selection.getAll().length 
+      });
       this.scheduleRender();
     }
     this.#callPlugins("afterAddElement", this.#ctx(), el);
@@ -152,33 +163,130 @@ export class AppShell {
   }
 
   /**
-   * Importa projeto de JSON (Array de elementos). Usa ElementFactory por "type".
-   * Estrutura esperada (compatível com CanvasModel.toJSON()):
-   * { grid: number, elements: [{ type, x, y, rotation, properties? }] }
-   */
+ * Importa projeto de JSON.
+ * Aceita:
+ *  - Formato "project": { grid, elements: [{ type, x, y, rotation, properties? }] }
+ *  - Formato "netlist": { grid, components:[...], wires:[...] }
+ */
   importJSON(jsonString, factory = ElementFactory) {
     try {
       const data = typeof jsonString === "string" ? JSON.parse(jsonString) : jsonString;
-      if (!data || !Array.isArray(data.elements)) throw new Error("JSON inválido.");
+      if (!data || typeof data !== "object") throw new Error("JSON inválido.");
 
-      // limpa atual
+      // aplica grid se vier
+      if (typeof data.grid === "number") this.model.grid = data.grid;
+
+      // Limpa projeto atual
       this.model.clear();
 
-      // recria elementos
-      for (const e of data.elements) {
-        const type = e.type || e.kind || e.t;
-        if (factory && factory.has(type)) {
-          const el = factory.create(type, e.x, e.y);
-          if (typeof e.rotation === "number") el.rotation = (e.rotation % 4 + 4) % 4;
-          if (e.properties && typeof e.properties === "object") {
-            el.properties = { ...el.properties, ...e.properties };
+      // Detecta esquema
+      if (Array.isArray(data.elements)) {
+        // ---- Formato PROJECT (existente) ----
+        for (const e of data.elements) {
+          const type = e.type || e.kind || e.t;
+          if (factory && factory.has(type)) {
+            const el = factory.create(type, e.x, e.y, { rotation: e.rotation, properties: e.properties });
+            el.updateCoords?.();
+            this.model.add(el);
           }
-          el.updateCoords();
-          this.model.add(el);
-        } else {
-          // fallback: ignora elementos desconhecidos (poderia logar em ToastService)
-          // console.warn("Tipo desconhecido import:", type, e);
         }
+      } else if (Array.isArray(data.components) || Array.isArray(data.wires)) {
+        // ---- Formato NETLIST (novo) ----
+        const mapKind = (k) => {
+          const s = String(k || "").toLowerCase();
+          if (s === "w" || s === "wire") return "wire";
+          if (s === "r" || s === "res" || s === "resistor") return "resistor";
+          if (s === "c" || s === "cap" || s === "capacitor") return "capacitor";
+          if (s === "gnd" || s === "ground") return "ground";
+          if (s === "probe") return "probe";
+          if (s === "ammeter" || s === "am") return "ammeter";
+          if (s === "v" || s === "i" || s === "source") return "source";
+          if (s === "label") return "label";
+          return s;
+        };
+
+        const rotFromPins = (ax, ay, bx, by) => {
+          // ângulo do vetor A->B (em rad) em relação ao eixo +X
+          const angX = Math.atan2(by - ay, bx - ax);
+          // nosso eixo base é +Y; logo α = angX - 90°
+          const alpha = angX - Math.PI / 2;
+          // quantiza para passos de 45°
+          let steps = Math.round(alpha / (Math.PI / 4));
+          steps = ((steps % 8) + 8) % 8;
+          return steps;
+        };
+
+        // wires
+        if (Array.isArray(data.wires)) {
+          for (const w of data.wires) {
+            const [[ax, ay], [bx, by]] =
+              w.a && w.b ? [w.a, w.b] :
+                Array.isArray(w.pins) && w.pins.length >= 2 ? [w.pins[0], w.pins[1]] :
+                  [];
+            if (ax == null || ay == null || bx == null || by == null) continue;
+            const el = factory?.create("wire", ax, ay, { x2: bx, y2: by });
+            if (el) this.model.add(el);
+          }
+        }
+
+        // components
+        if (Array.isArray(data.components)) {
+          for (const c of data.components) {
+            const kind = mapKind(c.kind || c.type);
+            // pinos esperados como [[x,y], [x,y], ...]
+            const pins = Array.isArray(c.pins) ? c.pins : (Array.isArray(c.pin) ? [c.pin] : []);
+            const props = {
+              ...(c.name ? { name: c.name } : {}),
+              ...(c.value ? { value: c.value } : {}),
+              ...(c.kind && (c.kind.toLowerCase() === "v" || c.kind.toLowerCase() === "i")
+                ? { kind: c.kind.toUpperCase() } : {})
+            };
+
+            if (kind === "wire") {
+              if (pins.length >= 2) {
+                const [a, b] = pins;
+                const el = factory?.create("wire", a[0], a[1], { x2: b[0], y2: b[1] });
+                if (el) this.model.add(el);
+              }
+              continue;
+            }
+
+            // elementos 2-pinos
+            if (pins.length >= 2 && ["resistor", "capacitor", "source", "ammeter"].includes(kind)) {
+              const [a, b] = pins;
+              const rotation = rotFromPins(a[0], a[1], b[0], b[1]);
+              const el = factory?.create(kind, a[0], a[1], { rotation, properties: props });
+              if (el) this.model.add(el);
+              continue;
+            }
+
+            // ground (1 pino)
+            if (kind === "ground" && pins.length >= 1) {
+              const [a] = pins;
+              const el = factory?.create("ground", a[0], a[1], { properties: props });
+              if (el) this.model.add(el);
+              continue;
+            }
+
+            // probe (1 pino)
+            if (kind === "probe" && pins.length >= 1) {
+              const [a] = pins;
+              const el = factory?.create("probe", a[0], a[1], { properties: props });
+              if (el) this.model.add(el);
+              continue;
+            }
+
+            // label (usa posição "at" se existir)
+            if (kind === "label" && Array.isArray(c.at)) {
+              const [x, y] = c.at;
+              const el = factory?.create("label", x, y, { properties: { text: c.text || c.name || "" } });
+              if (el) this.model.add(el);
+              continue;
+            }
+          }
+        }
+      } else {
+        throw new Error("JSON inválido.");
       }
 
       this.scheduleRender();
@@ -188,6 +296,7 @@ export class AppShell {
       return false;
     }
   }
+
 
   /** Força (ou agenda) um render. */
   render() {
@@ -303,7 +412,7 @@ export class AppShell {
     if (this._rafId) cancelAnimationFrame(this._rafId);
     this._rafId = 0;
 
-    if (this._dragCtl?.destroy)    this._dragCtl.destroy();
+    if (this._dragCtl?.destroy) this._dragCtl.destroy();
     if (this._marqueeCtl?.destroy) this._marqueeCtl.destroy();
   }
 
@@ -357,6 +466,7 @@ export class AppShell {
         else this.model.selection.add(el);
       }
       this.scheduleRender();
+      this.bus.publish("ui:selectionChanged", { count: this.model.selection.getAll().length });
     };
 
     canvasEl.addEventListener("click", onClick);
@@ -386,30 +496,30 @@ export class AppShell {
     // Helper p/ registrar assinatura e guardar unsubscribe
     const sub = (topic, fn) => this._unsubs.push(this.bus.subscribe(topic, fn));
 
-    sub("command:zoomIn",      (p) => this.zoomBy(1.1, p?.x, p?.y));
-    sub("command:zoomOut",     (p) => this.zoomBy(1/1.1, p?.x, p?.y));
-    sub("command:zoomReset",   () => this.zoomReset());
+    sub("command:zoomIn", (p) => this.zoomBy(1.1, p?.x, p?.y));
+    sub("command:zoomOut", (p) => this.zoomBy(1 / 1.1, p?.x, p?.y));
+    sub("command:zoomReset", () => this.zoomReset());
 
-    sub("command:clear",       () => { this.model.clear(); this.scheduleRender(); });
+    sub("command:clear", () => { this.model.clear(); this.scheduleRender(); });
     sub("command:deleteSelected", () => { this.removeSelected(); });
 
     sub("command:centerOnSelection", () => this.centerOnSelection());
 
-    sub("command:exportJSON",  () => {
+    sub("command:exportJSON", () => {
       const data = this.exportJSON(true);
       // Em produção, você pode abrir uma janela/baixar arquivo.
       console.log("Project JSON:\n", data);
       alert("Exportado no console (F12).");
     });
 
-    sub("command:importJSON",  (payload) => {
+    sub("command:importJSON", (payload) => {
       if (!payload || !payload.json) return;
       const ok = this.importJSON(payload.json, ElementFactory);
       if (!ok) alert("Falha ao importar JSON (ver console).");
     });
 
     // Ações de exemplo (enquanto não há PalettePanel)
-    sub("command:addWire",     () => {
+    sub("command:addWire", () => {
       const el = ElementFactory.create("wire", 16, 16);
       this.addElement(el, { select: true });
     });
@@ -426,8 +536,44 @@ export class AppShell {
     // sub("command:rotateCCW", () => this.#rotateSelection(-1));
     // sub("command:rotateCW",  (p) => this.#rotateSelection(p?.steps ?? 1));
     // sub("command:rotateCCW", (p) => this.#rotateSelection(-(p?.steps ?? 1)));
-    sub("command:rotateCW",  (p) => this.#rotateSelection(p?.steps ?? 1));
+    sub("command:rotateCW", (p) => this.#rotateSelection(p?.steps ?? 1));
     sub("command:rotateCCW", (p) => this.#rotateSelection(-(p?.steps ?? 1)));
+
+    sub("ui:openNetlist", () => {
+      const id = "netlist";
+      const view = new NetlistView({ app: this });
+      const win = this.windows.open({
+        id,
+        title: "Netlist",
+        width: 520,
+        height: 420,
+        x: 80,
+        y: 80,
+        content: view.getElement()
+      });
+      win.focus();
+    });
+
+    sub("ui:openInspector", () => {
+      const id = "inspector";
+      const view = new PropertyInspectorView({ app: this });
+      const win = this.windows.open({
+        id,
+        title: "Properties",
+        width: 360,
+        height: 300,
+        x: 520, y: 80,
+        content: view.getElement()
+      });
+      // quando a seleção mudar, peça para o view atualizar
+      const unsub = this.bus.subscribe("ui:selectionChanged", () => view.refresh());
+      // remove o listener quando a janela for fechada
+      const origClose = win.close;
+      win.close = () => { unsub(); origClose(); };
+      win.focus();
+    });
+
+
   }
 
   #bindKeyboardShortcuts(canvasEl) {
@@ -460,7 +606,7 @@ export class AppShell {
         this.bus.publish("command:undo");
         e.preventDefault();
       } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
-                 ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
         this.bus.publish("command:redo");
         e.preventDefault();
       } else if (!e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) {
@@ -479,7 +625,7 @@ export class AppShell {
     const sy = Math.round(y / step) * step;
     return [sx, sy];
   }
-  
+
   #rotateSelection(steps) {
     const items = this.model.selection.getAll();
     if (!items.length) return;
@@ -507,7 +653,7 @@ export class AppShell {
         el.y = cy + (vx * sin + vy * cos);
         el.rotation = ((el.rotation ?? 0) + steps) & 7;
         el.updateCoords?.();
-    }
+      }
       this.scheduleRender();
     }
   }

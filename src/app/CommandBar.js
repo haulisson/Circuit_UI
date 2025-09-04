@@ -117,6 +117,11 @@ export class CommandBar {
     const bDelete  = mkBtn("del",     "🗑️ Del",      "Excluir seleção (Del)",() => this.bus.publish("command:deleteSelected"));
     const bClear   = mkBtn("clear",   "🧹 Limpar",    "Limpar projeto",       () => this.bus.publish("command:clear"));
 
+    // Dentro do CommandBar.js, depois do grupo de arquivo:
+    const bNetlist = mkBtn("netlist", "🧾 Netlist", "Abrir janela de netlist", () => this.bus.publish("ui:openNetlist"));
+    // no CommandBar.js, após o grupo de arquivo:
+    const bProps = mkBtn("props", "⚙️ Properties", "Abrir inspector de propriedades", () => this.bus.publish("ui:openInspector"));
+
     // ------- grupo: arquivo (import/export) -------
     const fileInput = document.createElement("input");
     fileInput.type = "file";
@@ -141,6 +146,8 @@ export class CommandBar {
     });
 
     // Montagem
+    el.appendChild(group([bImport, bExport, bNetlist]));
+    el.appendChild(sep());
     el.appendChild(group([bUndo, bRedo]));               // NOVO
     el.appendChild(sep());
     el.appendChild(group([bZoomIn, bZoomOut, bZoom0, bCenter]));
@@ -150,6 +157,7 @@ export class CommandBar {
     el.appendChild(group([bAddWire, bAddRes, bDelete, bClear]));
     el.appendChild(sep());
     el.appendChild(group([bImport, bExport]));
+    el.appendChild(group([bProps]));
 
     // Estado inicial
     this.#applyState();
